@@ -23,7 +23,7 @@ import { Modal, Spinner, Table } from "react-bootstrap";
 import ClassicEditor from "@ckeditor/ckeditor5-build-classic";
 import CKEditor from "@ckeditor/ckeditor5-react";
 import clsx from "clsx";
-import StripeCheckout from "react-stripe-checkout";
+import PaymentWrapper from "../../Components/payment/PaymentWrapper";
 import { shallowEqual, useSelector } from "react-redux";
 import AlertSuccess from "../../Components/alerts/AlertSuccess";
 import AlertError from "../../Components/alerts/AlertError";
@@ -35,6 +35,7 @@ const WorldTourDetails = () => {
   const query = useQuery();
   const history = useHistory();
   const [loading, setLoading] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deals, setDeals] = useState(null);
@@ -86,51 +87,7 @@ const WorldTourDetails = () => {
       history.push("/world-tour");
     }
   }, []);
-  const makePayment = token => {
-    bookWorldTour({
-      token,
-      amount: parseInt(deals?.details.packages.price, 10) * 100,
-      dealId: deals._id,
-      packageId: deals.details.packages._id,
-      userId: user._id
-    })
-      .then(result => {
-        const bookedBy = deals.details.packages.bookedBy || [];
-        setDeals({
-          ...deals,
-          details: {
-            ...deals.details,
-            packages: {
-              ...deals.details.packages,
-              bookedBy: [...bookedBy, user._id]
-            }
-          }
-        });
-
-        setResponse({
-          success: {
-            show: true,
-            message: `Booking Confirmed Successfully`
-          },
-          error: {
-            show: false,
-            message: ""
-          }
-        });
-      })
-      .catch(error => {
-        setResponse({
-          success: {
-            show: false,
-            message: ""
-          },
-          error: {
-            show: true,
-            message: "Could not make payment at the moment"
-          }
-        });
-      });
-  };
+  
   const handleDeletePackage = () => {
     deleteWorldTourPackage({
       dealId: deals._id,
@@ -165,6 +122,38 @@ const WorldTourDetails = () => {
         });
       });
   };
+  const handleBooking = () => {
+    // Gọi API bookWorldTour (Backend cần sửa để không charge tiền nữa, xem Bước 4)
+    return bookWorldTour({
+      // Không cần gửi token Stripe cũ nữa
+      amount: parseInt(deals?.details.packages.price, 10) * 100,
+      dealId: deals._id,
+      packageId: deals.details.packages._id,
+      userId: user._id
+    }).then(result => {
+       // Cập nhật lại State giao diện như cũ
+        const bookedBy = deals.details.packages.bookedBy || [];
+        setDeals({
+          ...deals,
+          details: {
+            ...deals.details,
+            packages: {
+              ...deals.details.packages,
+              bookedBy: [...bookedBy, user._id]
+            }
+          }
+        });
+        return result;
+    });
+  };
+
+  const handlePaymentSuccess = () => {
+    setShowPaymentModal(false);
+    setResponse({
+        success: { show: true, message: "Booking & Payment Confirmed Successfully" },
+        error: { show: false, message: "" }
+    });
+  };
   return (
     <div className="pb-5">
       <Portlet className="kt-portlet--height-fluid-half kt-portlet--border-bottom-brand">
@@ -174,28 +163,17 @@ const WorldTourDetails = () => {
             <PortletHeaderToolbar>
               {user ? (
                 user?.role === "1" ? (
-                  <StripeCheckout
-                    token={makePayment}
-                    stripeKey={
-                      process.env.REACT_APP_STRIPE_KEY
+                  <button
+                    className={`btn btn-primary btn-elevate kt-login__btn-primary `}
+                    disabled={
+                      deals?.details.packages.bookedBy?.filter(
+                        bb => bb === user._id
+                      ).length > 0
                     }
-                    name="PaymentForFlight"
-                    amount={parseInt(deals?.details.packages.price, 10) * 100}
-                    currency="USD"
+                    onClick={() => setShowPaymentModal(true)} 
                   >
-                    <button
-                      className={`btn btn-primary btn-elevate kt-login__btn-primary `}
-                      disabled={
-                        deals?.details.packages.bookedBy?.filter(
-                          bb => bb === user._id
-                        ).length > 0
-                      }
-                      // style={loadingButtonStyle}
-                      // onClick={() => handleClickChangeStatus("Canceled")}
-                    >
-                      Book Now
-                    </button>
-                  </StripeCheckout>
+                    Book Now
+                  </button>
                 ) : (
                   <button
                     className={`btn btn-danger btn-elevate kt-login__btn-primary `}
@@ -310,6 +288,13 @@ const WorldTourDetails = () => {
           <Login isModal={true} handleLogin={() => setShowLogin(false)} />
         </Modal.Body>
       </Modal>
+      <PaymentWrapper
+        show={showPaymentModal}
+        onHide={() => setShowPaymentModal(false)}
+        flight={{ details: { price: { total: deals?.details.packages.price } } }} 
+        handleBook={handleBooking} 
+        onSuccess={handlePaymentSuccess}
+      />
     </div>
   );
 };

@@ -20,7 +20,8 @@ const {
   createDeals,
   getDeals,
   getDealPackage,
-  deleteDealPackage
+  deleteDealPackage,
+  createPaymentIntent
 } = require("../controllers/flight");
 const upload = require("../upload");
 const { requireSignin } = require("../controllers/auth");
@@ -53,4 +54,5 @@ router.get("/deals/package", getDealPackage);
 router.post("/world-tour/book", bookWorldTour);
 router.put("/world-tour/delete-package", deleteWorldTourPackage);
 router.put("/deals/delete-package", deleteDealPackage);
+router.post("/create-payment-intent", createPaymentIntent);
 module.exports = router;

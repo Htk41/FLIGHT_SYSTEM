@@ -9,7 +9,7 @@ import {
   checkoutForPayment
 } from "../../crud/flights.crud";
 import { shallowEqual, useSelector } from "react-redux";
-import StripeCheckout from "react-stripe-checkout";
+import PaymentWrapper from "../payment/PaymentWrapper";
 import { Link } from "react-router-dom";
 const FlightDetails = ({
   flight,
@@ -24,6 +24,7 @@ const FlightDetails = ({
 }) => {
   const [loadingBooking, setLoadingBooking] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const { isAuthorized, user } = useSelector(
     ({ auth }) => ({
       isAuthorized: auth.user != null,
@@ -126,56 +127,25 @@ const FlightDetails = ({
     setShowLogin(false);
     setShowDetails(true);
   };
-  const makePayment = token => {
-    console.log("token", token);
-    checkoutForPayment({
-      token,
-      amount: parseInt(flight.details?.price?.total, 10) * 100,
-      flightId: bookingStatus._id
-    })
-      .then(result => {
-        setShowDetails(false);
-        setDetails(null);
-        if (!result.data.error) {
-          updateTipsCancel(bookingStatus._id, "Confirmed");
-          setResponse({
-            success: {
-              show: true,
-              message: `Booking Confirmed Successfully`
-            },
-            error: {
-              show: false,
-              message: ""
-            }
-          });
-        } else {
-          setResponse({
-            success: {
-              show: false,
-              message: ""
-            },
-            error: {
-              show: true,
-              message: result.data.message
-            }
-          });
-        }
-      })
-      .catch(error => {
-        setShowDetails(false);
-        setDetails(null);
-        setResponse({
-          success: {
-            show: false,
-            message: ""
-          },
-          error: {
-            show: true,
-            message: "Could not make payment at the moment"
-          }
-        });
-      });
+  //hàm thanh toán stripe
+  const handlePaymentSuccess = () => {
+    setShowPaymentModal(false);
+    setShowDetails(false);
+    setDetails(null);
+    // Cập nhật giao diện báo thành công
+    updateTipsCancel(bookingStatus._id, "Confirmed");
+    setResponse({
+      success: {
+        show: true,
+        message: `Booking Confirmed Successfully`
+      },
+      error: {
+        show: false,
+        message: ""
+      }
+    });
   };
+
   console.log(flight);
   return (
     <React.Fragment>
@@ -347,28 +317,21 @@ const FlightDetails = ({
                 Cancel Booking
               </button>
             ) : (
-              <StripeCheckout
-                token={makePayment}
-                stripeKey={
-                  process.env.REACT_APP_STRIPE_KEY
-                }
-                name="PaymentForFlight"
-                amount={parseInt(flight?.details?.price?.total, 10) * 100}
-                currency="USD"
+              <button
+                className={`btn btn-primary btn-elevate kt-login__btn-primary ${clsx(
+                  {
+                    "kt-spinner kt-spinner--right kt-spinner--md kt-spinner--light": loadingBooking
+                  }
+                )}`}
+                disabled={bookingStatus?.bookingStatus !== "Approved"}
+                style={loadingButtonStyle}
+                onClick={() => {
+                   setShowDetails(false); 
+                   setShowPaymentModal(true); 
+                }}
               >
-                <button
-                  className={`btn btn-primary btn-elevate kt-login__btn-primary ${clsx(
-                    {
-                      "kt-spinner kt-spinner--right kt-spinner--md kt-spinner--light": loadingBooking
-                    }
-                  )}`}
-                  disabled={bookingStatus?.bookingStatus !== "Approved"}
-                  style={loadingButtonStyle}
-                  // onClick={() => handleClickChangeStatus("Canceled")}
-                >
-                  Confirm To Checkout
-                </button>
-              </StripeCheckout>
+                Confirm To Checkout
+              </button>
             )
           ) : (
             <button
@@ -394,6 +357,25 @@ const FlightDetails = ({
           <Login isModal={true} handleLogin={handleLogin} />
         </Modal.Body>
       </Modal>
+      <PaymentWrapper 
+          show={showPaymentModal}
+          onHide={() => {
+            setShowPaymentModal(false);
+            setShowDetails(true); 
+          }}
+          flight={{
+              ...bookingStatus,      
+              details: flight?.details // <--- THÊM DẤU ? VÀO ĐÂY
+          }} 
+          handleBook={() => {
+             // Kiểm tra nếu có bookingStatus thì mới gọi
+             if (bookingStatus && bookingStatus._id) {
+                 return changeFlightStatus({ flightId: bookingStatus._id, status: "Confirmed" });
+             }
+             return Promise.resolve(); // Tránh lỗi nếu không có id
+          }}
+          onSuccess={handlePaymentSuccess}
+        />
     </React.Fragment>
   );
 };

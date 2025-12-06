@@ -4,6 +4,8 @@ const Users = require("../models/users");
 const mongoose = require("mongoose");
 const Amadeus = require("amadeus");
 const { sendEmail } = require("../helpers");
+const { generateInvoicePDF } = require("../helpers/pdfGenerator");
+const nodemailer = require("nodemailer"); 
 
 require("dotenv").config();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
@@ -266,23 +268,69 @@ exports.getAllTrips = async (req, res) => {
 exports.changeFlightStatus = async (req, res) => {
   try {
     const { flightId, status } = req.body;
+    
+    // 1. Cập nhật trạng thái
     const trip = await Flights.findOneAndUpdate(
-      {
-        _id: mongoose.Types.ObjectId(flightId)
-      },
-      {
-        bookingStatus: status
-      }
-    );
+      { _id: mongoose.Types.ObjectId(flightId) },
+      { bookingStatus: status },
+      { new: true }
+    ).populate("bookedBy");
 
     if (trip) {
-      await res.json({
-        trip
-      });
+      // 2. Nếu Confirm thì gửi mail
+      if (status === "Confirmed" && trip.bookedBy) {
+        console.log("🚀 Đang chuẩn bị gửi email...");
+        
+        const transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: {
+            user: "htkiet4104@gmail.com", 
+            pass: "drfyaufojszquhdy",  
+          },
+        });
+
+        // Tạo PDF
+        const doc = generateInvoicePDF(trip, trip.bookedBy);
+        
+        const mailOptions = {
+          from: '"Flight System" <no-reply@flight.com>',
+          to: trip.bookedBy.email,
+          subject: `Vé điện tử / E-Ticket: ${trip._id.toString().slice(-6).toUpperCase()}`,
+          html: `
+            <h3>Cảm ơn bạn đã đặt vé!</h3>
+            <p>Xin chào ${trip.bookedBy.firstName},</p>
+            <p>Giao dịch của bạn đã thành công. Vui lòng xem vé điện tử đính kèm.</p>
+          `,
+          attachments: [
+            {
+              filename: `Ticket-${trip._id}.pdf`,
+              content: doc, 
+              contentType: "application/pdf",
+            },
+          ],
+        };
+
+        // --- SỬA LẠI ĐOẠN NÀY ---
+        
+        // 1. Gọi lệnh gửi mail
+        transporter.sendMail(mailOptions, (err, info) => {
+           if (err) {
+             console.error("❌ LỖI GỬI MAIL:", err); 
+           } else {
+             console.log("✅ GỬI MAIL THÀNH CÔNG:", info.response);
+           }
+        });
+
+        doc.end(); 
+        
+      }
+
+      await res.json({ trip });
     } else {
-      await res.status(400).json({ error: "Could not cancel Flight" });
+      await res.status(400).json({ error: "Could not update Flight" });
     }
   } catch (e) {
+    console.log(e);
     await res.json({ error: e.message });
   }
 };
@@ -506,45 +554,24 @@ exports.getDealPackage = async (req, res) => {
 
 exports.bookWorldTour = async (req, res) => {
   try {
-    const { packageId, userId, dealId, token, amount } = req.body;
-    console.log("req.body", req.body);
-    return stripe.customers
-      .create({
-        email: token.email,
-        source: token.id
-      })
-      .then(customer => {
-        stripe.charges.create(
-          {
-            amount: amount,
-            currency: "usd",
-            customer: customer.id
-          },
-          { idempotencyKey: packageId }
-        );
-      })
-      .then(result => {
-        Deals.findOneAndUpdate(
-          {
-            _id: dealId,
-            "details.packages._id": mongoose.Types.ObjectId(packageId)
-          },
-          {
-            $addToSet: {
-              "details.packages.$.bookedBy": mongoose.Types.ObjectId(userId)
-            }
-          },
-
-          { new: true }
-        ).then(deal => {
-          res.json({
-            deal
-          });
-        });
-      })
-      .catch(error => {
-        res.json({ error: "Could not make payment", message: error.message });
-      });
+    // Bỏ token, amount vì đã thanh toán ở frontend
+    const { packageId, userId, dealId } = req.body; 
+    
+    // Chỉ thực hiện lưu vào Database
+    Deals.findOneAndUpdate(
+      {
+        _id: dealId,
+        "details.packages._id": mongoose.Types.ObjectId(packageId)
+      },
+      {
+        $addToSet: {
+          "details.packages.$.bookedBy": mongoose.Types.ObjectId(userId)
+        }
+      },
+      { new: true }
+    ).then(deal => {
+      res.json({ deal });
+    });
   } catch (e) {
     await res.json({ error: e.message });
   }
@@ -591,5 +618,51 @@ exports.deleteDealPackage = async (req, res) => {
     });
   } catch (e) {
     await res.json({ error: e.message });
+  }
+};
+
+exports.createPaymentIntent = async (req, res) => {
+  try {
+    const { amount, currency } = req.body;
+    
+    // Tạo PaymentIntent với Stripe
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amount, 
+      currency: currency || "usd",
+      automatic_payment_methods: {
+        enabled: true,
+      },
+    });
+
+    res.json({
+      clientSecret: paymentIntent.client_secret,
+    });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+};
+
+exports.confirmWorldTourBooking = async (req, res) => {
+  try {
+    const { packageId, userId, dealId } = req.body;
+    
+    Deals.findOneAndUpdate(
+      {
+        _id: dealId,
+        "details.packages._id": mongoose.Types.ObjectId(packageId)
+      },
+      {
+        $addToSet: {
+          "details.packages.$.bookedBy": mongoose.Types.ObjectId(userId)
+        }
+      },
+      { new: true }
+    ).then(deal => {
+      res.json({ success: true, deal });
+    }).catch(err => {
+      res.status(400).json({ error: "DB Update failed", message: err.message });
+    });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
   }
 };
