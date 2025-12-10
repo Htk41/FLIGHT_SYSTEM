@@ -340,12 +340,20 @@ const Home = () => {
                 borderRadius: "4px"
               }}
             >
-              <div className="row">
-                <h4 className="mb-3 col-12">Flights</h4>
-                <div className="col-3 font-weight-bold mb-4">Airline</div>
-                <div className="col-3 font-weight-bold mb-4">Departure</div>
-                <div className="col-3 font-weight-bold mb-4">Arrival</div>
-                <div className="col-3 font-weight-bold mb-4">Duration</div>
+              <h4 className="mb-3 col-12">Flights</h4>
+              <div className="row px-3 mb-2 d-none d-md-flex font-weight-bold text-muted small text-uppercase">
+                {/* Cột 1: Airline (Khớp col-md-3 của FlightItem) */}
+                <div className="col-md-3 pl-4">Airline</div>
+                
+                {/* Cột 2: Thời gian (Khớp col-md-5 của FlightItem) */}
+                <div className="col-md-5 d-flex justify-content-between text-center px-4">
+                    <div>Departure</div>
+                    <div>Duration</div>
+                    <div>Arrival</div>
+                </div>
+
+                {/* Cột 3: Giá (Khớp col-md-4 của FlightItem) */}
+                <div className="col-md-4 text-right pr-4">Price</div>
               </div>
 
               <FlightList

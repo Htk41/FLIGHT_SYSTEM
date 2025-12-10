@@ -15,6 +15,7 @@ import {
 } from "reactstrap";
 import { Spinner } from "react-bootstrap";
 import { shallowEqual, useSelector } from "react-redux";
+
 const Deals = () => {
   const [filters, setFilters] = useState({
     country: "",

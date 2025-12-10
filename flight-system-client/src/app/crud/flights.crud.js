@@ -7,8 +7,12 @@ export const GET_RECOMMENDED = "/api/flights/recommended";
 export const GET_USER_TRIPS = "/api/flights/user-trips";
 export const GET_ALL_TRIPS = "/api/flights/all-trips";
 export const BOOK_FLIGHT = "/api/flights/book";
+export const BOOK_FLIGHT_URL = "/api/flights/book";
 export const CHANGE_FLIGHT_STATUS = "/api/flights/status";
 export const CHECKOUT_PAYMENT = "/api/flights/confirm";
+export const GET_SEAT_MAP = "/api/flights/seat-map";
+export const HOLD_SEAT = "/api/flights/hold-seat";
+export const RELEASE_SEAT = "/api/flights/release-seat";
 export const BOOK_WORLD_TOUR = "/api/flights/world-tour/book";
 export const DELETE_WORLD_TOUR_PACKAGE =
   "/api/flights/world-tour/delete-package";
@@ -52,13 +56,26 @@ export function getRecommended() {
   return axios.get(GET_RECOMMENDED);
 }
 
-export function bookFlight({ details, userId }) {
-  return axios.post(BOOK_FLIGHT, { details, userId });
+export function bookFlight(data) {
+  return axios.post(BOOK_FLIGHT_URL, data);
 }
 
 export function changeFlightStatus({ flightId, status }) {
   return axios.put(CHANGE_FLIGHT_STATUS, { flightId, status });
 }
+
+export function getSeatMap(amadeusId) {
+  return axios.get(`${GET_SEAT_MAP}?amadeusId=${amadeusId}`);
+}
+
+export function holdSeat(data) {
+  return axios.post(HOLD_SEAT, data);
+}
+
+export function releaseSeat(data) {
+  return axios.post(RELEASE_SEAT, data);
+}
+
 export function checkoutForPayment({ token, amount, flightId }) {
   return axios.post(CHECKOUT_PAYMENT, { token, amount, flightId });
 }

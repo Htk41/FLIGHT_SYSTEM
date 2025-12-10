@@ -8,6 +8,7 @@ const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 const compression = require("compression");
 const http = require("http");
+const startCronJobs = require("./helpers/cronJobs");
 
 const PORT = process.env.PORT || 3001;
 const app = express();
@@ -33,6 +34,7 @@ app.use(express.static("upload"));
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(cookieParser());
+startCronJobs();
 //Routes
 app.use("/api/auth", AuthRouter);
 app.use("/api/users", userRouter);

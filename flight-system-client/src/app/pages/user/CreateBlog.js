@@ -76,6 +76,8 @@ const CreateBlog = ({ edit }) => {
     }, 2000);
   };
   const handleClickRemoveImage = (setFieldValue, images, i) => {
+    if (!images || !Array.isArray(images)) return; 
+    
     setFieldValue(
       "images",
       images.filter((img, index) => index !== i)
@@ -98,7 +100,7 @@ const CreateBlog = ({ edit }) => {
               initialValues={{
                 title: details?.title || "",
                 description: details?.description || "",
-                images: details?.images || []
+                images: (details && details.images) ? details.images : []
               }}
               enableReinitialize
               validate={createBlogValidations}

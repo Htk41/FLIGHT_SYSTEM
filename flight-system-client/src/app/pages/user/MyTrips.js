@@ -63,7 +63,10 @@ const MyTrips = ({ userType = "admin" }) => {
                 trip.bookingStatus !== "Pending" &&
                 trip.bookingStatus !== "Canceled"
             )
-            .map(trip => trip.details);
+            .map(trip => {
+               return trip.flightInfo || trip.details;
+            })
+            .filter(item => item != null);
           let events = [];
           tipss.map(trip => {
             trip.itineraries.map((intinerary, index) => {

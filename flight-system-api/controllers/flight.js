@@ -1,4 +1,4 @@
-const Flights = require("../models/flights");
+const { FlightBooking, FlightInventory } = require("../models/flights");
 const Deals = require("../models/deals");
 const Users = require("../models/users");
 const mongoose = require("mongoose");
@@ -15,6 +15,7 @@ const amadeus = new Amadeus({
   clientSecret: process.env.AMADEUS_CLIENT_SECRET
 });
 
+// API TÌM KIẾM CHUYẾN BAY QUA AMADEUS
 exports.getOneWayFlights = async (req, res) => {
   try {
     const { origin, destination, depart, adults, child } = req.query;
@@ -40,7 +41,7 @@ exports.getOneWayFlights = async (req, res) => {
         }
       ];
     }
-    amadeus.shopping.flightOffersSearch
+    const response = await amadeus.shopping.flightOffersSearch
       .post(
         JSON.stringify({
           currencyCode: "USD",
@@ -61,13 +62,8 @@ exports.getOneWayFlights = async (req, res) => {
             maxFlightOffers: 10
           }
         })
-      )
-      .then(function(response) {
-        res.json({ flights: response.data });
-      })
-      .catch(function(responseError) {
-        res.json({ responseError });
-      });
+      );
+    res.json({ flights: response.data });
   } catch (e) {
     await res.json({ error: e.message });
   }
@@ -105,7 +101,7 @@ exports.getTwoWayFlights = async (req, res) => {
         }
       ];
     }
-    amadeus.shopping.flightOffersSearch
+    const response = await amadeus.shopping.flightOffersSearch
       .post(
         JSON.stringify({
           currencyCode: "USD",
@@ -114,7 +110,6 @@ exports.getTwoWayFlights = async (req, res) => {
               id: "1",
               originLocationCode: origin,
               destinationLocationCode: destination,
-
               departureDateTimeRange: {
                 date: depart
               }
@@ -123,7 +118,6 @@ exports.getTwoWayFlights = async (req, res) => {
               id: "2",
               originLocationCode: destination,
               destinationLocationCode: origin,
-
               departureDateTimeRange: {
                 date: returnDate
               }
@@ -135,49 +129,44 @@ exports.getTwoWayFlights = async (req, res) => {
             maxFlightOffers: 10
           }
         })
-      )
-
-      .then(function(response) {
-        res.json({ flights: response.data });
-      })
-      .catch(function(responseError) {
-        res.json({ responseError });
-      });
+      );
+    res.json({ flights: response.data });
   } catch (e) {
     await res.json({ error: e.message });
   }
 };
 
+// API phụ trợ khác từ Amadeus
 exports.getAirline = async (req, res) => {
   try {
     const { airlineCodes } = req.query;
-    amadeus.referenceData.airlines
-      .get({
-        airlineCodes
-      })
-      .then(function(response) {
-        res.json({ airline: response.data });
-      })
-      .catch(function(responseError) {
-        res.json({ responseError });
-      });
+    const response = await amadeus.referenceData.airlines.get({ airlineCodes });
+    res.json({ airline: response.data });
   } catch (e) {
     await res.json({ error: e.message });
   }
 };
+
 exports.getRecommended = async (req, res) => {
   try {
-    amadeus.referenceData.recommendedLocations
-      .get({
-        cityCodes: "HAN,LON,NYC,PAR",
-        travelerCountryCode: "FR"
-      })
-      .then(function(response) {
-        res.json({ recommended: response.data });
-      })
-      .catch(function(responseError) {
-        res.json({ responseError });
-      });
+    const response = await amadeus.referenceData.recommendedLocations
+    .get({
+      cityCodes: "HAN,LON,NYC,PAR",
+      travelerCountryCode: "FR"
+    });
+    res.json({ recommended: response.data });
+  } catch (e) {
+    await res.json({ error: e.message });
+  }
+};
+
+exports.getRecommended = async (req, res) => {
+  try {
+    const response = await amadeus.referenceData.recommendedLocations.get({
+      cityCodes: "HAN,LON,NYC,PAR",
+      travelerCountryCode: "FR"
+    });
+    res.json({ recommended: response.data });
   } catch (e) {
     await res.json({ error: e.message });
   }
@@ -185,91 +174,200 @@ exports.getRecommended = async (req, res) => {
 
 exports.getPricing = async (req, res) => {
   try {
-    amadeus.travel.analytics.AirTraffic.Traveled.get({
+    const response = await amadeus.travel.analytics.AirTraffic.Traveled.get({
       originCityCode: "HAN",
-      period: "2020-01"
-    })
-      .then(function(response) {
-        res.json({ recommended: response.data });
-      })
-      .catch(function(responseError) {
-        res.json({ responseError });
-      });
+      period: "2025-01"
+    });
+    res.json({ recommended: response.data });
   } catch (e) {
     await res.json({ error: e.message });
   }
 };
+
+// API ĐẶT CHUYẾN BAY
 exports.bookFlight = async (req, res) => {
   try {
-    const { details, userId } = req.body;
-    const flight = await new Flights({
-      bookedBy: userId,
-      bookingStatus: "Pending",
-      details
-    });
-    const newFlight = await flight.save();
-    if (newFlight) {
-      const user = await Users.findById(userId);
-      if (user) {
-        const emailData = {
-          to: user.email,
-          subject: "Flight Booked",
-          html: `<p>Dear ${user.firstName} ${user.lastName}</p><p>Please collect your ticket from your airport after confirmation of booking, ticket id is "${newFlight._id}"</p>`
-        };
-        sendEmail(emailData);
-      }
+    const { 
+        userId, 
+        passengers, 
+        flightInfo, 
+        totalPrice,
+        bookingStatus 
+    } = req.body;
 
-      await res.json({
-        message: `Please collect your ticket from your airport after confirmation of booking, ticket id is "${newFlight._id}"`
+    console.log("--------------- BOOK FLIGHT REQUEST ---------------");
+    console.log("User ID:", userId);
+    console.log("Total Price:", totalPrice);
+    console.log("Passengers Count:", passengers ? passengers.length : "N/A");
+    console.log("Flight Info Present:", !!flightInfo);
+
+    // --- VALIDATION ---
+    if (!userId || !passengers || !flightInfo || !totalPrice) {
+      return res.status(400).json({ error: "Missing required booking information. Please check userId, passengers, flightInfo, and totalPrice." });
+    }
+
+    // Lấy thông tin user để lưu contact
+    const user = await Users.findById(userId);
+    
+    // Tạo Booking mới dùng Model FlightBooking (Thay vì Flights)
+    const newBooking = new FlightBooking({
+      bookedBy: userId,
+      passengers: passengers,
+      flightInfo: flightInfo, // Lưu chi tiết chuyến bay
+      contactEmail: user ? user.email : "",
+      contactPhone: user ? user.mobileNo : "",
+      totalPrice: totalPrice,
+      currency: "USD",
+      bookingStatus: bookingStatus || "Pending"
+    });
+
+    const savedBooking = await newBooking.save();
+
+    if (savedBooking && bookingStatus === "Confirmed") {
+        const amadeusId = flightInfo.id || flightInfo._id; 
+
+        // Lấy danh sách số ghế từ hành khách
+        const seatNumbers = passengers.map(p => p.seatNumber);
+
+        if (amadeusId && seatNumbers.length > 0) {
+            await FlightInventory.updateOne(
+                { amadeusFlightId: amadeusId },
+                {
+                    $set: {
+                        "seats.$[elem].status": "booked", // Chuyển thành đã bán
+                        "seats.$[elem].heldBy": userId,   // Lưu người mua
+                        "seats.$[elem].heldAt": new Date()
+                    }
+                },
+                {
+                    // Update tất cả các ghế khớp với seatNumbers
+                    arrayFilters: [{ "elem.number": { $in: seatNumbers } }]
+                }
+            );
+        }
+
+        // Gửi mail xác nhận
+        if (user) {
+            sendEmail({
+              to: user.email,
+              subject: "Flight Booking Confirmed",
+              html: `<p>Thank you! Your booking <b>${savedBooking._id}</b> is confirmed.</p>`
+            });
+        }
+
+      res.json({
+        success: true,
+        message: "Booking created successfully!",
+        bookingId: savedBooking._id
       });
     } else {
-      await res.status(400).json({ error: "Could not book flight" });
+      res.status(400).json({ error: "Could not create booking" });
     }
   } catch (e) {
-    await res.json({ error: e.message });
+    console.error("BookFlight Error:", e);
+    res.status(500).json({ error: e.message });
+  }
+};
+
+// API QUẢN LÝ GHẾ 
+
+exports.getSeatMap = async (req, res) => {
+  try {
+    const { amadeusId } = req.query;
+    if (!amadeusId) return res.status(400).json({ error: "Missing amadeusId" });
+
+    let inventory = await FlightInventory.findOne({ amadeusFlightId: amadeusId });
+
+    // Tạo ghế giả lập 
+    if (!inventory) {
+      const rows = 20; const cols = ['A', 'B', 'C', 'D', 'E', 'F'];
+      let newSeats = [];
+      for (let r = 1; r <= rows; r++) {
+        for (let c of cols) {
+          newSeats.push({ number: `${r}${c}`, status: 'available', price: (r <= 5) ? 20 : 0 });
+        }
+      }
+      inventory = await FlightInventory.create({ amadeusFlightId: amadeusId, seats: newSeats });
+    }
+    res.json({ seats: inventory.seats });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+};
+
+exports.holdSeat = async (req, res) => {
+  try {
+    const { amadeusId, seatNumber, userId } = req.body;
+    const result = await FlightInventory.findOneAndUpdate(
+      { amadeusFlightId: amadeusId, seats: { $elemMatch: { number: seatNumber, status: "available" } } },
+      { $set: { "seats.$.status": "held", "seats.$.heldBy": userId, "seats.$.heldAt": new Date() } },
+      { new: true }
+    );
+    if (!result) return res.status(409).json({ message: `Sorry, seat ${seatNumber} was just taken by someone else!` });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+};
+
+exports.releaseSeat = async (req, res) => {
+  try {
+    const { amadeusId, seatNumber, userId } = req.body;
+
+    // Tìm ghế đang được giữ bởi CHÍNH user này và reset
+    const result = await FlightInventory.findOneAndUpdate(
+      {
+        amadeusFlightId: amadeusId,
+        seats: { 
+          $elemMatch: { 
+            number: seatNumber, 
+            status: "held",
+            heldBy: userId 
+          } 
+        }
+      },
+      {
+        $set: {
+          "seats.$.status": "available",
+          "seats.$.heldBy": null,
+          "seats.$.heldAt": null
+        }
+      },
+      { new: true }
+    );
+
+    if (!result) {
+        return res.status(400).json({ message: "Không thể hủy ghế này (hoặc đã bị hủy rồi)." });
+    }
+
+    res.json({ success: true, message: "Đã hủy giữ ghế." });
+
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 };
 
 exports.getUserTrips = async (req, res) => {
   try {
     const { userId } = req.params;
-    const trips = await Flights.find({
-      bookedBy: mongoose.Types.ObjectId(userId)
-    });
-
-    if (trips) {
-      await res.json({
-        trips
-      });
-    } else {
-      await res.status(400).json({ error: "Could not find trips" });
-    }
-  } catch (e) {
-    await res.json({ error: e.message });
-  }
+    const trips = await FlightBooking.find({ bookedBy: mongoose.Types.ObjectId(userId) })
+                                   .populate("bookedBy")
+                                   .sort({ createdAt: -1 }); // Mới nhất trước
+    res.json({ trips });
+  } catch (e) { res.json({ error: e.message }); }
 };
 
 exports.getAllTrips = async (req, res) => {
   try {
-    const trips = await Flights.find().populate("bookedBy");
-
-    if (trips) {
-      await res.json({
-        trips
-      });
-    } else {
-      await res.status(400).json({ error: "Could not find trips" });
-    }
-  } catch (e) {
-    await res.json({ error: e.message });
-  }
+    const trips = await FlightBooking.find().populate("bookedBy").sort({ createdAt: -1 });
+    res.json({ trips });
+  } catch (e) { res.json({ error: e.message }); }
 };
 
 exports.changeFlightStatus = async (req, res) => {
   try {
     const { flightId, status } = req.body;
     
-    // 1. Cập nhật trạng thái
     const trip = await Flights.findOneAndUpdate(
       { _id: mongoose.Types.ObjectId(flightId) },
       { bookingStatus: status },
@@ -279,7 +377,7 @@ exports.changeFlightStatus = async (req, res) => {
     if (trip) {
       // 2. Nếu Confirm thì gửi mail
       if (status === "Confirmed" && trip.bookedBy) {
-        console.log("🚀 Đang chuẩn bị gửi email...");
+        console.log("Đang chuẩn bị gửi email...");
         
         const transporter = nodemailer.createTransport({
           service: "gmail",
@@ -309,15 +407,13 @@ exports.changeFlightStatus = async (req, res) => {
             },
           ],
         };
-
-        // --- SỬA LẠI ĐOẠN NÀY ---
         
         // 1. Gọi lệnh gửi mail
         transporter.sendMail(mailOptions, (err, info) => {
            if (err) {
-             console.error("❌ LỖI GỬI MAIL:", err); 
+             console.error("LỖI GỬI MAIL:", err); 
            } else {
-             console.log("✅ GỬI MAIL THÀNH CÔNG:", info.response);
+             console.log("GỬI MAIL THÀNH CÔNG:", info.response);
            }
         });
 
@@ -624,7 +720,6 @@ exports.deleteDealPackage = async (req, res) => {
 exports.createPaymentIntent = async (req, res) => {
   try {
     const { amount, currency } = req.body;
-    
     // Tạo PaymentIntent với Stripe
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amount, 
@@ -633,7 +728,6 @@ exports.createPaymentIntent = async (req, res) => {
         enabled: true,
       },
     });
-
     res.json({
       clientSecret: paymentIntent.client_secret,
     });
